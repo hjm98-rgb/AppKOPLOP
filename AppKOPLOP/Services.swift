@@ -667,4 +667,70 @@ final class StoreEngine: ObservableObject {
     private func tick() {
         // 真实下载由 IPADownloader 回报进度，这里不做模拟推进
     }
+    private func persistInstalled() {
+        let ids = states.filter { $0.value.phase == .installed }.map { $0.key }
+        defaults.set(ids, forKey: "installed")
+    }
+
+    var installedApps: [StoreApp] {
+        Catalog.apps.filter { state(for: $0).phase == .installed }
+    }
+
+    var downloadingCount: Int {
+        states.values.filter { $0.phase == .downloading || $0.phase == .installing }.count
+    }
+
+    // MARK: 账户
+
+    func addAccount(alias: String, appleID: String) {
+        accounts.append(SigningAccount(alias: alias, appleID: appleID))
+        persistAccounts()
+    }
+
+    func removeAccount(_ account: SigningAccount) {
+        accounts.removeAll { $0.id == account.id }
+        persistAccounts()
+    }
+
+    private func persistAccounts() {
+        if let data = try? JSONEncoder().encode(accounts) {
+            defaults.set(data, forKey: "accounts")
+        }
+    }
+
+    // MARK: 设置
+
+    func setLanguage(_ lang: AppLanguage) {
+        language = lang
+        defaults.set(lang.rawValue, forKey: "lang")
+    }
+
+    func setServer(_ mode: String) {
+        serverMode = mode
+        defaults.set(mode, forKey: "serverMode")
+    }
+
+    func toggleVPN() {
+        vpnConnected.toggle()
+        defaults.set(vpnConnected, forKey: "vpn")
+        showToast(vpnConnected ? L("本地循环通道已连接", "Loopback channel connected") : L("本地循环通道已断开", "Loopback channel disconnected"))
+    }
+
+    func showToast(_ text: String) {
+        toast = text
+        toastWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            withAnimation { self?.toast = nil }
+        }
+        toastWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
+    }
+
+    func open(_ app: StoreApp) {
+        selectedApp = app
+    }
+
+    func closeDetail() {
+        selectedApp = nil
+    }
 }

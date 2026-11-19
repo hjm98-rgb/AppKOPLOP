@@ -539,10 +539,22 @@ struct ServerSheet: View {
     @EnvironmentObject var engine: StoreEngine
     @Environment(\.presentationMode) var presentation
 
-    private var options: [(String, String, String, String)] {
-        [("auto", "自动", "Auto", L("先试上次成功的服务器，再按成功率轮换内置列表。", "Try the last good server, then rotate the built-in list.")),
-         ("local", "本地 AOSKit", "Local AOSKit", L("用设备系统自带的组件在本机生成，不经过任何服务器。", "Generated on device with the system framework, no server.")),
-         ("manual", "手动地址", "Manual", L("给自己指定一个 anisette 地址，填写后才生效。", "Point to your own anisette endpoint."))]
+    private struct ServerOption {
+        let key: String
+        let zh: String
+        let en: String
+        let desc: String
+    }
+
+    private var options: [ServerOption] {
+        [
+            ServerOption(key: "auto", zh: "自动", en: "Auto",
+                         desc: L("先试上次成功的服务器，再按成功率轮换内置列表。", "Try the last good server, then rotate the built-in list.")),
+            ServerOption(key: "local", zh: "本地 AOSKit", en: "Local AOSKit",
+                         desc: L("用设备系统自带的组件在本机生成，不经过任何服务器。", "Generated on device with the system framework, no server.")),
+            ServerOption(key: "manual", zh: "手动地址", en: "Manual",
+                         desc: L("给自己指定一个 anisette 地址，填写后才生效。", "Point to your own anisette endpoint."))
+        ]
     }
 
     var body: some View {
@@ -551,22 +563,22 @@ struct ServerSheet: View {
                 VStack(spacing: 0) {
                     ForEach(Array(options.enumerated()), id: \.offset) { idx, opt in
                         Button {
-                            engine.setServer(opt.0)
+                            engine.setServer(opt.key)
                             presentation.wrappedValue.dismiss()
                         } label: {
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(L(opt.1, opt.2))
+                                    Text(L(opt.zh, opt.en))
                                         .font(DS.text(15, .semibold))
                                         .foregroundColor(DS.ink)
-                                    Text(opt.3)
+                                    Text(opt.desc)
                                         .font(DS.text(11))
                                         .foregroundColor(DS.sub)
                                         .multilineTextAlignment(.leading)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                                 Spacer(minLength: 8)
-                                if engine.serverMode == opt.0 {
+                                if engine.serverMode == opt.key {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 14, weight: .bold))
                                         .foregroundColor(DS.blue)
