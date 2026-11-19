@@ -762,29 +762,6 @@ final class StoreEngine: ObservableObject {
     }
 }
 
-// MARK: - 安装
-
-enum AppInstaller {
-    typealias InstallFn = @convention(c) (CFString, CFDictionary, UnsafeMutablePointer<CFString?>?) -> Int32
-
-    static func install(path: String, completion: @escaping (Bool, String) -> Void) {
-        let fw = "/System/Library/PrivateFrameworks/MobileInstallation.framework/MobileInstallation"
-        guard let handle = dlopen(fw, RTLD_NOW), let sym = dlsym(handle, "MobileInstallationInstall") else {
-            completion(false, "no mobileinstallation")
-            return
-        }
-        let fn = unsafeBitCast(sym, to: InstallFn.self)
-        let options: [String: Any] = ["ApplicationType": "User", "IsUpgrade": true]
-        var errorLabel: CFString?
-        let code = fn(path as CFString, options as CFDictionary, &errorLabel)
-        if code == 0 {
-            completion(true, "")
-        } else {
-            completion(false, "code \(code)")
-        }
-    }
-}
-
 // MARK: - 安装（系统私有接口）
 
 enum AppInstaller {
