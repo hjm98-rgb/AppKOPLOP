@@ -4,8 +4,10 @@ import SwiftUI
 
 struct MeView: View {
     @EnvironmentObject var engine: StoreEngine
+    @EnvironmentObject var signing: SigningEngine
 
     @State private var showAddAccount = false
+    @State private var showSigning = false
     @State private var showServerSheet = false
     @State private var showPrivacy = false
 
@@ -33,6 +35,11 @@ struct MeView: View {
         }
         .sheet(isPresented: $showPrivacy) {
             PrivacyShortSheet()
+        }
+        .sheet(isPresented: $showSigning) {
+            SigningSetupView()
+                .environmentObject(signing)
+                .environmentObject(engine)
         }
     }
 
@@ -153,6 +160,29 @@ struct MeView: View {
 
                 HDivider().padding(.leading, 56)
 
+                Button { showSigning = true } label: {
+                    HStack(spacing: 12) {
+                        iconBox("key.fill")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("签名环境", "Signing environment"))
+                                .font(DS.text(15, .medium))
+                                .foregroundColor(DS.ink)
+                            Text(signingStatusText)
+                                .font(DS.text(11))
+                                .foregroundColor(signing.phase == .ready ? DS.green : DS.sub)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(DS.sub.opacity(0.6))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 13)
+                }
+                .buttonStyle(.plain)
+
+                HDivider().padding(.leading, 56)
+
                 HStack(spacing: 12) {
                     iconBox("number.square")
                     VStack(alignment: .leading, spacing: 2) {
@@ -193,6 +223,16 @@ struct MeView: View {
             }
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(DS.group))
             .padding(.horizontal, 20)
+        }
+    }
+
+    private var signingStatusText: String {
+        switch signing.phase {
+        case .ready: return L("已就绪 · 可签名", "Ready to sign")
+        case .idle: return L("未配置 · 点此登录", "Not set up · tap to sign in")
+        case .twoFactor: return L("等待六位验证码", "Waiting for the 6-digit code")
+        case .failed: return L("配置失败 · 点此重试", "Failed · tap to retry")
+        default: return signing.status.isEmpty ? L("配置中…", "Setting up…") : signing.status
         }
     }
 
@@ -605,5 +645,195 @@ struct PrivacyShortSheet: View {
             })
         }
         .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+
+// MARK: - ID 签配置
+
+struct SigningSetupView: View {
+    @EnvironmentObject var signing: SigningEngine
+    @EnvironmentObject var engine: StoreEngine
+    @Environment(\.presentationMode) var presentation
+
+    @State private var appleID: String = ""
+    @State private var password: String = ""
+    @State private var code: String = ""
+
+    var body: some View {
+        NavigationView {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    statusCard
+
+                    if signing.needsCode {
+                        codeForm
+                    } else if signing.phase == .ready {
+                        readyCard
+                    } else {
+                        loginForm
+                    }
+
+                    if let error = signing.lastError, signing.phase == .failed {
+                        Text(error)
+                            .font(DS.text(12))
+                            .foregroundColor(Color(hex: "#C0392B"))
+                            .padding(12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(hex: "#FDECEA")))
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(L("这一步做了什么", "What happens here"))
+                            .font(DS.text(13, .semibold))
+                            .foregroundColor(DS.ink)
+                        ForEach(stepLines, id: \.self) { line in
+                            HStack(alignment: .top, spacing: 8) {
+                                Circle().fill(DS.line).frame(width: 5, height: 5).padding(.top, 6)
+                                Text(line)
+                                    .font(DS.text(12))
+                                    .foregroundColor(DS.sub)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DS.group))
+
+                    Text(L("全程在设备上完成：anisette 由系统框架本地生成，账号只发往 Apple，证书与描述文件存在本机。",
+                           "Everything happens on device: anisette is generated locally, credentials go only to Apple."))
+                        .font(DS.text(11))
+                        .foregroundColor(DS.sub.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(20)
+            }
+            .navigationBarTitle(L("签名环境", "Signing environment"), displayMode: .inline)
+            .navigationBarItems(trailing: Button(L("完成", "Done")) {
+                presentation.wrappedValue.dismiss()
+            })
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+    }
+
+    private var statusCard: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle().fill(signing.phase == .ready ? Color(hex: "#E8F7EC") : DS.fill)
+                Image(systemName: signing.phase == .ready ? "checkmark.seal.fill" : "key.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(signing.phase == .ready ? DS.green : DS.blue)
+            }
+            .frame(width: 44, height: 44)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(signing.phase == .ready ? L("签名环境已就绪", "Ready to sign") : L("签名环境", "Signing environment"))
+                    .font(DS.text(16, .semibold))
+                    .foregroundColor(DS.ink)
+                Text(signing.status.isEmpty ? L("登录后会自动申请证书与描述文件", "Signing in requests the certificate and profile") : signing.status)
+                    .font(DS.text(12))
+                    .foregroundColor(DS.sub)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(DS.group))
+    }
+
+    private var loginForm: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text(L("Apple ID", "Apple ID"))
+                        .font(DS.text(13, .medium))
+                        .foregroundColor(DS.sub)
+                        .frame(width: 74, alignment: .leading)
+                    TextField("name@icloud.com", text: $appleID)
+                        .font(DS.text(15))
+                        .keyboardType(.emailAddress)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 50)
+
+                HDivider().padding(.leading, 14)
+
+                HStack {
+                    Text(L("密码", "Password"))
+                        .font(DS.text(13, .medium))
+                        .foregroundColor(DS.sub)
+                        .frame(width: 74, alignment: .leading)
+                    SecureField(L("账户密码", "Password"), text: $password)
+                        .font(DS.text(15))
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 50)
+            }
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DS.group))
+
+            PrimaryButton(title: L("登录并申请证书", "Sign in and request"), enabled: appleID.contains("@") && !password.isEmpty) {
+                signing.reset()
+                signing.signIn(appleID: appleID, password: password)
+                engine.linkAppleID(appleID, password: password)
+            }
+        }
+    }
+
+    private var codeForm: some View {
+        VStack(spacing: 12) {
+            Text(L("Apple 会向你的设备发送六位验证码", "Apple sends a 6-digit code to your devices"))
+                .font(DS.text(13))
+                .foregroundColor(DS.sub)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            TextField(L("六位数字", "6 digits"), text: $code)
+                .font(.system(size: 22, weight: .semibold, design: .monospaced))
+                .keyboardType(.numberPad)
+                .multilineTextAlignment(.center)
+                .frame(height: 54)
+                .frame(maxWidth: .infinity)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DS.group))
+
+            PrimaryButton(title: L("验证", "Verify"), enabled: code.count >= 6) {
+                signing.submitCode(code)
+                code = ""
+            }
+        }
+    }
+
+    private var readyCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            infoLine(L("账户", "Account"), signing.sessionEmail.isEmpty ? engine.appleIDMasked : signing.sessionEmail)
+            HDivider()
+            infoLine(L("证书", "Certificate"), signing.certificateName.isEmpty ? "—" : signing.certificateName)
+            HDivider()
+            infoLine(L("App ID 数量", "App IDs"), "\(signing.appIDCount)")
+            HDivider()
+            infoLine(L("设备", "Device"), UIDevice.current.name)
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DS.group))
+    }
+
+    private func infoLine(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(DS.text(12))
+                .foregroundColor(DS.sub)
+            Spacer()
+            Text(value)
+                .font(DS.text(12, .medium))
+                .foregroundColor(DS.ink)
+                .lineLimit(1)
+        }
+    }
+
+    private var stepLines: [String] {
+        [L("用本机 AOSKit 生成 anisette 头，不需要任何服务器", "Generate anisette headers locally with AOSKit"),
+         L("向 Apple 登录，必要时输入六位验证码", "Sign in to Apple, enter the 6-digit code when asked"),
+         L("登记设备、申请证书与 App ID", "Register the device, request a certificate and App ID"),
+         L("生成描述文件，签名环境进入就绪状态", "Create the provisioning profile, then the environment is ready")]
     }
 }

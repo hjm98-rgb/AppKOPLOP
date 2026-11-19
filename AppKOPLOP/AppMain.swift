@@ -138,6 +138,7 @@ struct AppKOPLOPApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(StoreEngine.shared)
+                .environmentObject(SigningEngine.shared)
         }
     }
 }
