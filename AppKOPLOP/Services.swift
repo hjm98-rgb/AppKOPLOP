@@ -784,3 +784,32 @@ enum AppInstaller {
         }
     }
 }
+
+// MARK: - 安装（系统私有接口）
+
+enum AppInstaller {
+    private typealias InstallFn = @convention(c) (CFString, CFDictionary, UnsafeMutablePointer<CFString?>?) -> Int32
+
+    /// 用系统的 MobileInstallation 装已签名包。未越狱设备上是否放行取决于签名时注入的权限。
+    static func install(path: String, completion: @escaping (Bool, String) -> Void) {
+        guard FileManager.default.fileExists(atPath: path) else {
+            completion(false, L("打不开已签名包", "Signed package missing"))
+            return
+        }
+        guard let handle = dlopen("/System/Library/PrivateFrameworks/MobileInstallation.framework/MobileInstallation", RTLD_NOW),
+              let symbol = dlsym(handle, "MobileInstallationInstall") else {
+            completion(false, L("系统没有开放安装接口", "Install API unavailable"))
+            return
+        }
+        let fn = unsafeBitCast(symbol, to: InstallFn.self)
+        var errorLabel: CFString?
+        let options = ["ApplicationType": "User", "IsUpgrade": true] as CFDictionary
+        let code = fn(path as CFString, options, &errorLabel)
+        if code == 0 {
+            completion(true, "")
+        } else {
+            let label = (errorLabel as String?) ?? ""
+            completion(false, "code \(code) \(label)")
+        }
+    }
+}
