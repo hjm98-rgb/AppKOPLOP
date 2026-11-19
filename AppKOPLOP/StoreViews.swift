@@ -24,7 +24,6 @@ struct AppDetailView: View {
                         head
                         downloadRow
                         statsRow
-                        screenshots
                         descriptionBlock
                         infoBlock
                         developerBlock
@@ -225,50 +224,6 @@ struct AppDetailView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: 截图
-
-    private var screenshots: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(0..<3) { i in
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(LinearGradient(colors: shotColors(i), startPoint: .top, endPoint: .bottom))
-                        .frame(width: 148, height: 264)
-                        .overlay(
-                            VStack(spacing: 10) {
-                                Image(systemName: app.symbol)
-                                    .font(.system(size: 34, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.92))
-                                Text(shotCaption(i))
-                                    .font(DS.text(12, .medium))
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
-                        )
-                }
-            }
-            .padding(.horizontal, 20)
-        }
-        .padding(.top, 6)
-        .padding(.bottom, 6)
-    }
-
-    private func shotColors(_ i: Int) -> [Color] {
-        let c1 = Color(hex: app.colorTop)
-        let c2 = Color(hex: app.colorBottom)
-        switch i {
-        case 0: return [c1, c2]
-        case 1: return [c2, Color.black.opacity(0.55)]
-        default: return [Color(hex: "#101318"), c1.opacity(0.6)]
-        }
-    }
-
-    private func shotCaption(_ i: Int) -> String {
-        switch i {
-        case 0: return L("主界面", "Main screen")
-        case 1: return L("详情与设置", "Details and settings")
-        default: return L("本地通道", "Local channel")
-        }
-    }
 
     // MARK: 描述
 
