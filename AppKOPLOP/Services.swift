@@ -681,7 +681,10 @@ final class StoreEngine: ObservableObject {
             } else {
                 f.phase = .signed
                 self.states[app.id] = f
-                self.showToast(L("签名完成，系统安装接口拒绝：", "Signed, install API refused: ") + message)
+                self.showToast(L("系统接口被拒，已交给你装：分享面板里选全能签", "Install API refused, handing off: pick your signer"))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                    IPASharing.present(path: path)
+                }
             }
         }
     }
@@ -788,5 +791,22 @@ enum AppInstaller {
             let label = (errorLabel as String?) ?? ""
             completion(false, "code \(code) \(label)")
         }
+    }
+}
+
+
+// MARK: - 把签好的包直接递给签名工具
+
+enum IPASharing {
+    static func present(path: String) {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              var top = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController else { return }
+        while let p = top.presentedViewController { top = p }
+        let vc = UIActivityViewController(activityItems: [URL(fileURLWithPath: path)], applicationActivities: nil)
+        if let pop = vc.popoverPresentationController {
+            pop.sourceView = top.view
+            pop.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY, width: 0, height: 0)
+        }
+        top.present(vc, animated: true)
     }
 }
