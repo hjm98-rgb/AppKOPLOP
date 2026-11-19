@@ -17,6 +17,16 @@ func L(_ zh: String, _ en: String) -> String {
 
 // MARK: - 数据模型
 
+struct UserReview: Codable, Identifiable {
+    var id = UUID()
+    var appID: String
+    var author: String
+    var stars: Int
+    var title: String
+    var text: String
+    var createdAt: Date
+}
+
 struct StoreReview: Identifiable {
     let id = UUID()
     let author: String
@@ -456,6 +466,7 @@ final class StoreEngine: ObservableObject {
     @Published var currentTab: Int = 0
     @Published var selectedApp: StoreApp?
     @Published var toast: String?
+    @Published var userReviews: [UserReview] = []
 
     private var timer: Timer?
     private let defaults = UserDefaults.standard
@@ -487,6 +498,10 @@ final class StoreEngine: ObservableObject {
         if let data = defaults.data(forKey: "accounts"),
            let decoded = try? JSONDecoder().decode([SigningAccount].self, from: data) {
             accounts = decoded
+        }
+        if let data = defaults.data(forKey: "userReviews"),
+           let decoded = try? JSONDecoder().decode([UserReview].self, from: data) {
+            userReviews = decoded
         }
         var initial: [String: DownloadState] = [:]
         let installed = defaults.stringArray(forKey: "installed") ?? []
@@ -545,6 +560,38 @@ final class StoreEngine: ObservableObject {
         let tail = id[at...]
         if head.count <= 2 { return "***\(tail)" }
         return "\(head.prefix(2))***\(tail)"
+    }
+
+    // MARK: 评论
+
+    func reviews(for app: StoreApp) -> [StoreReview] {
+        let mine = userReviews.filter { $0.appID == app.id }.sorted { $0.createdAt > $1.createdAt }
+            .map { r -> StoreReview in
+                let days = max(0, Calendar.current.dateComponents([.day], from: r.createdAt, to: Date()).day ?? 0)
+                return StoreReview(author: r.author, stars: r.stars, title: r.title, text: r.text, daysAgo: days)
+            }
+        return mine + app.reviews
+    }
+
+    func addReview(app: StoreApp, stars: Int, title: String, text: String, author: String) {
+        let r = UserReview(appID: app.id, author: author.isEmpty ? "我" : author,
+                           stars: max(1, min(5, stars)), title: title, text: text, createdAt: Date())
+        userReviews.insert(r, at: 0)
+        if let data = try? JSONEncoder().encode(userReviews) {
+            defaults.set(data, forKey: "userReviews")
+        }
+        showToast(L("评论已发布", "Review posted"))
+    }
+
+    func averageRating(for app: StoreApp) -> Double {
+        let all = reviews(for: app)
+        guard !all.isEmpty else { return app.rating }
+        let sum = all.reduce(0) { $0 + $1.stars }
+        let base = Double(sum) / Double(all.count)
+        if all.count >= 5 { return base }
+        // 少量评论时和原始评分做加权，避免一条五星把分数顶满
+        let weight = Double(app.ratingCount) / Double(app.ratingCount + all.count)
+        return (app.rating * weight) + (base * (1 - weight))
     }
 
     // MARK: 下载
@@ -667,6 +714,38 @@ final class StoreEngine: ObservableObject {
         let tail = id[at...]
         if head.count <= 2 { return "***\(tail)" }
         return "\(head.prefix(2))***\(tail)"
+    }
+
+    // MARK: 评论
+
+    func reviews(for app: StoreApp) -> [StoreReview] {
+        let mine = userReviews.filter { $0.appID == app.id }.sorted { $0.createdAt > $1.createdAt }
+            .map { r -> StoreReview in
+                let days = max(0, Calendar.current.dateComponents([.day], from: r.createdAt, to: Date()).day ?? 0)
+                return StoreReview(author: r.author, stars: r.stars, title: r.title, text: r.text, daysAgo: days)
+            }
+        return mine + app.reviews
+    }
+
+    func addReview(app: StoreApp, stars: Int, title: String, text: String, author: String) {
+        let r = UserReview(appID: app.id, author: author.isEmpty ? "我" : author,
+                           stars: max(1, min(5, stars)), title: title, text: text, createdAt: Date())
+        userReviews.insert(r, at: 0)
+        if let data = try? JSONEncoder().encode(userReviews) {
+            defaults.set(data, forKey: "userReviews")
+        }
+        showToast(L("评论已发布", "Review posted"))
+    }
+
+    func averageRating(for app: StoreApp) -> Double {
+        let all = reviews(for: app)
+        guard !all.isEmpty else { return app.rating }
+        let sum = all.reduce(0) { $0 + $1.stars }
+        let base = Double(sum) / Double(all.count)
+        if all.count >= 5 { return base }
+        // 少量评论时和原始评分做加权，避免一条五星把分数顶满
+        let weight = Double(app.ratingCount) / Double(app.ratingCount + all.count)
+        return (app.rating * weight) + (base * (1 - weight))
     }
 
     // MARK: 下载

@@ -8,6 +8,8 @@ struct AppDetailView: View {
     let app: StoreApp
 
     @State private var expanded = false
+    @State private var showShare = false
+    @State private var showComposer = false
 
     private var state: DownloadState { engine.state(for: app) }
 
@@ -34,6 +36,17 @@ struct AppDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showShare) {
+            ShareSheet(items: [shareText])
+        }
+        .sheet(isPresented: $showComposer) {
+            ReviewComposer(app: app)
+                .environmentObject(engine)
+        }
+    }
+
+    private var shareText: String {
+        "\(app.name) · \(L(app.subtitle, app.subtitleEN))\n\(app.website)\n在 App KOP LOP 里看"
     }
 
     // MARK: 顶栏
@@ -59,7 +72,7 @@ struct AppDetailView: View {
 
             Spacer()
 
-            Button { engine.showToast(L("已加入分享列表", "Added to share sheet")) } label: {
+            Button { showShare = true } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(DS.blue)
@@ -111,11 +124,12 @@ struct AppDetailView: View {
             switch state.phase {
             case .idle:
                 Button { engine.startDownload(app) } label: {
-                    Text(L("获取", "Get"))
-                        .font(DS.text(16, .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 132, height: 42)
-                        .background(Capsule().fill(DS.blue))
+                    Text(L("获取", "GET"))
+                        .font(.system(size: 13, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundColor(DS.blue)
+                        .frame(width: 84, height: 32)
+                        .background(Capsule().fill(DS.blue.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
 
@@ -130,11 +144,12 @@ struct AppDetailView: View {
 
             case .downloaded:
                 Button { engine.sign(app) } label: {
-                    Text(L("签名", "Sign"))
-                        .font(DS.text(16, .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 132, height: 42)
-                        .background(Capsule().fill(DS.blue))
+                    Text(L("签名", "SIGN"))
+                        .font(.system(size: 13, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundColor(DS.blue)
+                        .frame(width: 84, height: 32)
+                        .background(Capsule().fill(DS.blue.opacity(0.12)))
                 }
                 .buttonStyle(.plain)
                 Text(L("已下载，待签名", "Downloaded, ready to sign"))
@@ -442,11 +457,20 @@ struct AppDetailView: View {
 
     private var reviewsBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SectionHeader(title: L("评分与评论", "Ratings and reviews"))
+            HStack {
+                SectionHeader(title: L("评分与评论", "Ratings and reviews"))
+                Spacer()
+                Button { showComposer = true } label: {
+                    Text(L("写评论", "Write"))
+                        .font(DS.text(13, .semibold))
+                        .foregroundColor(DS.blue)
+                }
+                .buttonStyle(.plain)
+            }
 
             HStack(alignment: .center, spacing: 18) {
                 VStack(spacing: 4) {
-                    Text(String(format: "%.1f", app.rating))
+                    Text(String(format: "%.1f", engine.averageRating(for: app)))
                         .font(.system(size: 42, weight: .bold))
                         .foregroundColor(DS.ink)
                     StarRow(rating: app.rating, size: 12)
@@ -480,9 +504,9 @@ struct AppDetailView: View {
             .padding(.horizontal, 20)
 
             VStack(spacing: 0) {
-                ForEach(Array(app.reviews.enumerated()), id: \.element.id) { idx, review in
+                ForEach(Array(engine.reviews(for: app).enumerated()), id: \.element.id) { idx, review in
                     reviewCell(review)
-                    if idx < app.reviews.count - 1 { HDivider().padding(.leading, 16) }
+                    if idx < engine.reviews(for: app).count - 1 { HDivider().padding(.leading, 16) }
                 }
             }
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(DS.group))
@@ -732,7 +756,7 @@ struct SearchView: View {
                         .lineLimit(1)
                     HStack(spacing: 4) {
                         StarRow(rating: app.rating, size: 8)
-                        Text(String(format: "%.1f", app.rating))
+                        Text(String(format: "%.1f", engine.averageRating(for: app)))
                             .font(DS.text(10))
                             .foregroundColor(DS.sub)
                     }
@@ -749,5 +773,104 @@ struct SearchView: View {
             .padding(.vertical, 10)
         }
         .buttonStyle(.plain)
+    }
+}
+
+
+// MARK: - 分享面板
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - 写评论
+
+struct ReviewComposer: View {
+    @EnvironmentObject var engine: StoreEngine
+    @Environment(\.presentationMode) var presentation
+
+    let app: StoreApp
+
+    @State private var stars = 5
+    @State private var title = ""
+    @State private var text = ""
+    @State private var author = ""
+
+    var body: some View {
+        NavigationView {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(spacing: 8) {
+                        AppIconTile(app: app, size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(app.name)
+                                .font(DS.text(16, .semibold))
+                                .foregroundColor(DS.ink)
+                            Text(L("写点评", "Write a review"))
+                                .font(DS.text(12))
+                                .foregroundColor(DS.sub)
+                        }
+                    }
+
+                    HStack(spacing: 10) {
+                        ForEach(1...5, id: \.self) { i in
+                            Button { stars = i } label: {
+                                Image(systemName: i <= stars ? "star.fill" : "star")
+                                    .font(.system(size: 26))
+                                    .foregroundColor(i <= stars ? Color(hex: "#F5A623") : DS.sub.opacity(0.5))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    VStack(spacing: 0) {
+                        TextField(L("标题", "Title"), text: $title)
+                            .font(DS.text(15))
+                            .padding(.horizontal, 14)
+                            .frame(height: 48)
+                        HDivider().padding(.leading, 14)
+                        TextField(L("昵称（可不填）", "Nickname (optional)"), text: $author)
+                            .font(DS.text(15))
+                            .padding(.horizontal, 14)
+                            .frame(height: 48)
+                    }
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DS.group))
+
+                    ZStack(alignment: .topLeading) {
+                        if text.isEmpty {
+                            Text(L("说说用起来怎么样", "How does it work for you"))
+                                .font(DS.text(13))
+                                .foregroundColor(DS.sub.opacity(0.7))
+                                .padding(.horizontal, 18)
+                                .padding(.top, 14)
+                        }
+                        TextEditor(text: $text)
+                            .font(DS.text(14))
+                            .frame(height: 140)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.clear)
+                    }
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(DS.group))
+
+                    PrimaryButton(title: L("发布", "Post"), enabled: !title.isEmpty || !text.isEmpty) {
+                        engine.addReview(app: app, stars: stars, title: title, text: text, author: author)
+                        presentation.wrappedValue.dismiss()
+                    }
+                }
+                .padding(20)
+            }
+            .navigationBarTitle(L("评价", "Review"), displayMode: .inline)
+            .navigationBarItems(leading: Button(L("取消", "Cancel")) {
+                presentation.wrappedValue.dismiss()
+            })
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
