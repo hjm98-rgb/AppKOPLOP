@@ -624,7 +624,18 @@ final class StoreEngine: ObservableObject {
         s.phase = .downloaded
         s.localPath = path.path
         states[id] = s
-        showToast(L("下载完成", "Download finished"))
+        if let app = Catalog.apps.first(where: { $0.id == id }) {
+            autoSign(app)
+        }
+    }
+
+    // 一键：下载完自动签名，签名完自动安装
+    private func autoSign(_ app: StoreApp) {
+        guard SigningEngine.shared.phase == .ready else {
+            showToast(L("下载好了，去「我的 → 签名环境」配置一次，之后都自动签名", "Downloaded. Set up signing once"))
+            return
+        }
+        sign(app)
     }
 
     func failDownload(_ id: String, _ message: String) {
@@ -649,12 +660,28 @@ final class StoreEngine: ObservableObject {
                     f.phase = .signed
                     f.localPath = out.path
                     self.states[app.id] = f
-                    self.showToast(L("签名完成，已存到文件 App", "Signed, saved to Files"))
+                    self.installSigned(app, path: out.path)
                 } else {
                     f.phase = .downloaded
                     self.states[app.id] = f
                     self.showToast(L("签名失败，看签名环境里的错误", "Signing failed"))
                 }
+            }
+        }
+    }
+
+    private func installSigned(_ app: StoreApp, path: String) {
+        AppInstaller.install(path: path) { ok, message in
+            var f = self.state(for: app)
+            if ok {
+                f.phase = .installed
+                self.states[app.id] = f
+                self.persistInstalled()
+                self.showToast(L("已安装到桌面", "Installed to Home Screen"))
+            } else {
+                f.phase = .signed
+                self.states[app.id] = f
+                self.showToast(L("签名完成，系统安装接口拒绝：", "Signed, install API refused: ") + message)
             }
         }
     }
@@ -732,5 +759,28 @@ final class StoreEngine: ObservableObject {
 
     func closeDetail() {
         selectedApp = nil
+    }
+}
+
+// MARK: - 安装
+
+enum AppInstaller {
+    typealias InstallFn = @convention(c) (CFString, CFDictionary, UnsafeMutablePointer<CFString?>?) -> Int32
+
+    static func install(path: String, completion: @escaping (Bool, String) -> Void) {
+        let fw = "/System/Library/PrivateFrameworks/MobileInstallation.framework/MobileInstallation"
+        guard let handle = dlopen(fw, RTLD_NOW), let sym = dlsym(handle, "MobileInstallationInstall") else {
+            completion(false, "no mobileinstallation")
+            return
+        }
+        let fn = unsafeBitCast(sym, to: InstallFn.self)
+        let options: [String: Any] = ["ApplicationType": "User", "IsUpgrade": true]
+        var errorLabel: CFString?
+        let code = fn(path as CFString, options as CFDictionary, &errorLabel)
+        if code == 0 {
+            completion(true, "")
+        } else {
+            completion(false, "code \(code)")
+        }
     }
 }
