@@ -37,20 +37,42 @@ struct AppIconTile: View {
     var corner: CGFloat { size * 0.235 }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: corner, style: .continuous)
-                .fill(LinearGradient(colors: [Color(hex: app.colorTop), Color(hex: app.colorBottom)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            Image(systemName: app.symbol)
-                .font(.system(size: size * 0.42, weight: .semibold))
-                .foregroundColor(.white)
-                .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+        Group {
+            if let ui = IconStore.image(app.id) {
+                Image(uiImage: ui)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    LinearGradient(colors: [Color(hex: app.colorTop), Color(hex: app.colorBottom)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Image(systemName: app.symbol)
+                        .font(.system(size: size * 0.42, weight: .semibold))
+                        .foregroundColor(.white)
+                        .shadow(color: Color.black.opacity(0.12), radius: 2, x: 0, y: 1)
+                }
+            }
         }
         .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: corner, style: .continuous)
                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
+    }
+}
+
+// 仓库里带出来的真实图标，按应用 id 命名，放在 bundle 的 icons/ 目录
+enum IconStore {
+    private static var cache: [String: UIImage] = [:]
+
+    static func image(_ id: String) -> UIImage? {
+        if let hit = cache[id] { return hit }
+        guard let path = Bundle.main.path(forResource: id, ofType: "png", inDirectory: "icons"),
+              let img = UIImage(contentsOfFile: path) else { return nil }
+        cache[id] = img
+        return img
     }
 }
 

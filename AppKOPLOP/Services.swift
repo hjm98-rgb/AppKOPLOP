@@ -377,12 +377,65 @@ enum KeychainStore {
 // MARK: - 下载引擎
 
 enum DownloadPhase {
-    case idle, downloading, installing, installed
+    case idle, downloading, downloaded, installing, signed, installed
 }
 
 struct DownloadState {
     var progress: Double = 0
     var phase: DownloadPhase = .idle
+    var localPath: String?
+}
+
+// 每个应用对应的最新未签名包。空着表示仓库还没出 Release。
+let packageURLs: [String: String] = [
+    "jit": "https://github.com/hjm98-rgb/JIT-RPOQ/releases/download/v1.4.1/JITRPOQ-1.4.1-unsigned.ipa",
+    "amethyst": "https://github.com/hjm98-rgb/Amethyst-Offline/releases/download/v1.1/org.angelauramc.amethyst-1.0-ios.ipa"
+]
+
+final class IPADownloader: NSObject, URLSessionDownloadDelegate {
+    static let shared = IPADownloader()
+
+    private lazy var session: URLSession = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
+    private var ids: [Int: String] = [:]
+    private var tasks: [String: URLSessionDownloadTask] = [:]
+
+    func start(appID: String, url: URL) {
+        let t = session.downloadTask(with: url)
+        ids[t.taskIdentifier] = appID
+        tasks[appID] = t
+        t.resume()
+    }
+
+    func cancel(appID: String) {
+        tasks[appID]?.cancel()
+        tasks[appID] = nil
+    }
+
+    func urlSession(_ s: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+                    totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard let id = ids[downloadTask.taskIdentifier] else { return }
+        let p = totalBytesExpectedToWrite > 0 ? min(1, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)) : 0
+        StoreEngine.shared.updateDownload(id, progress: p)
+    }
+
+    func urlSession(_ s: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let id = ids[downloadTask.taskIdentifier] else { return }
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Downloads")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dest = dir.appendingPathComponent("\(id).ipa")
+        try? FileManager.default.removeItem(at: dest)
+        do {
+            try FileManager.default.moveItem(at: location, to: dest)
+            StoreEngine.shared.finishDownload(id, path: dest)
+        } catch {
+            StoreEngine.shared.failDownload(id, error.localizedDescription)
+        }
+    }
+
+    func urlSession(_ s: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let id = ids[task.taskIdentifier], let e = error else { return }
+        StoreEngine.shared.failDownload(id, e.localizedDescription)
+    }
 }
 
 final class StoreEngine: ObservableObject {
@@ -501,14 +554,188 @@ final class StoreEngine: ObservableObject {
     }
 
     func startDownload(_ app: StoreApp) {
+        let s = state(for: app)
+        if s.phase != .idle { return }
+        guard let str = packageURLs[app.id], let url = URL(string: str) else {
+            showToast(L("这款还没出安装包，仓库有 Release 后自动出现", "No package yet"))
+            return
+        }
+        states[app.id] = DownloadState(progress: 0, phase: .downloading)
+        IPADownloader.shared.start(appID: app.id, url: url)
+    }
+
+    func updateDownload(_ id: String, progress: Double) {
+        var s = states[id] ?? DownloadState()
+        s.progress = progress
+        s.phase = .downloading
+        states[id] = s
+    }
+
+    func finishDownload(_ id: String, path: URL) {
+        var s = states[id] ?? DownloadState()
+        s.progress = 1
+        s.phase = .downloaded
+        s.localPath = path.path
+        states[id] = s
+        showToast(L("下载完成", "Download finished"))
+    }
+
+    func failDownload(_ id: String, _ message: String) {
+        states[id] = DownloadState()
+        showToast(L("下载失败：", "Download failed: ") + message)
+    }
+
+    func sign(_ app: StoreApp) {
+        guard let path = state(for: app).localPath else { return }
+        guard SigningEngine.shared.phase == .ready else {
+            showToast(L("先去「我的 → 签名环境」配置证书", "Set up signing first"))
+            return
+        }
         var s = state(for: app)
-        if s.phase == .installed || s.phase == .downloading || s.phase == .installing { return }
-        s = DownloadState(progress: 0, phase: .downloading)
+        s.phase = .installing
         states[app.id] = s
-        showToast(L("已加入下载队列", "Added to downloads"))
+        SigningEngine.shared.sign(appAt: URL(fileURLWithPath: path)) { [weak self] output in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                var f = self.state(for: app)
+                if let out = output {
+                    f.phase = .signed
+                    f.localPath = out.path
+                    self.states[app.id] = f
+                    self.showToast(L("签名完成，已存到文件 App", "Signed, saved to Files"))
+                } else {
+                    f.phase = .downloaded
+                    self.states[app.id] = f
+                    self.showToast(L("签名失败，看签名环境里的错误", "Signing failed"))
+                }
+            }
+        }
     }
 
     func cancelDownload(_ app: StoreApp) {
+        IPADownloader.shared.cancel(appID: app.id)
+        states[app.id] = DownloadState(progress: 0, phase: .idle)
+    }
+
+    private func tick() {
+        // 真实下载由 IPADownloader 回报进度，这里不做模拟推进
+    }
+
+    // MARK: 引导
+
+    func acceptPrivacy() {
+        didAcceptPrivacy = true
+        defaults.set(true, forKey: "privacy")
+    }
+
+    func linkAppleID(_ id: String, password: String) {
+        appleIDLinked = true
+        appleIDSkipped = false
+        let mask = maskEmail(id)
+        appleIDMasked = mask
+        defaults.set(true, forKey: "appleLinked")
+        defaults.set(mask, forKey: "appleMask")
+        defaults.set(false, forKey: "appleSkipped")
+        KeychainStore.save(id, key: "appleID")
+        KeychainStore.save(password, key: "applePwd")
+    }
+
+    func skipAppleID() {
+        appleIDSkipped = true
+        appleIDLinked = false
+        defaults.set(true, forKey: "appleSkipped")
+        defaults.set(false, forKey: "appleLinked")
+    }
+
+    func completeOnboarding() {
+        didFinishOnboarding = true
+        defaults.set(true, forKey: "onboarded")
+    }
+
+    func resetOnboarding() {
+        didFinishOnboarding = false
+        didAcceptPrivacy = false
+        defaults.set(false, forKey: "onboarded")
+        defaults.set(false, forKey: "privacy")
+    }
+
+    private func maskEmail(_ id: String) -> String {
+        guard let at = id.firstIndex(of: "@") else {
+            return id.count > 3 ? "\(id.prefix(2))***" : id
+        }
+        let head = id[..<at]
+        let tail = id[at...]
+        if head.count <= 2 { return "***\(tail)" }
+        return "\(head.prefix(2))***\(tail)"
+    }
+
+    // MARK: 下载
+
+    func state(for app: StoreApp) -> DownloadState {
+        states[app.id] ?? DownloadState()
+    }
+
+    func startDownload(_ app: StoreApp) {
+        let s = state(for: app)
+        if s.phase != .idle { return }
+        guard let str = packageURLs[app.id], let url = URL(string: str) else {
+            showToast(L("这款还没出安装包，仓库有 Release 后自动出现", "No package yet"))
+            return
+        }
+        states[app.id] = DownloadState(progress: 0, phase: .downloading)
+        IPADownloader.shared.start(appID: app.id, url: url)
+    }
+
+    func updateDownload(_ id: String, progress: Double) {
+        var s = states[id] ?? DownloadState()
+        s.progress = progress
+        s.phase = .downloading
+        states[id] = s
+    }
+
+    func finishDownload(_ id: String, path: URL) {
+        var s = states[id] ?? DownloadState()
+        s.progress = 1
+        s.phase = .downloaded
+        s.localPath = path.path
+        states[id] = s
+        showToast(L("下载完成", "Download finished"))
+    }
+
+    func failDownload(_ id: String, _ message: String) {
+        states[id] = DownloadState()
+        showToast(L("下载失败：", "Download failed: ") + message)
+    }
+
+    func sign(_ app: StoreApp) {
+        guard let path = state(for: app).localPath else { return }
+        guard SigningEngine.shared.phase == .ready else {
+            showToast(L("先去「我的 → 签名环境」配置证书", "Set up signing first"))
+            return
+        }
+        var s = state(for: app)
+        s.phase = .installing
+        states[app.id] = s
+        SigningEngine.shared.sign(appAt: URL(fileURLWithPath: path)) { [weak self] output in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                var f = self.state(for: app)
+                if let out = output {
+                    f.phase = .signed
+                    f.localPath = out.path
+                    self.states[app.id] = f
+                    self.showToast(L("签名完成，已存到文件 App", "Signed, saved to Files"))
+                } else {
+                    f.phase = .downloaded
+                    self.states[app.id] = f
+                    self.showToast(L("签名失败，看签名环境里的错误", "Signing failed"))
+                }
+            }
+        }
+    }
+
+    func cancelDownload(_ app: StoreApp) {
+        IPADownloader.shared.cancel(appID: app.id)
         states[app.id] = DownloadState(progress: 0, phase: .idle)
     }
 

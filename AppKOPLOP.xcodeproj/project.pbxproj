@@ -12,6 +12,7 @@
 		1A0000000000000000000023 /* MeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000013 /* MeViews.swift */; };
 		1A0000000000000000000024 /* Services.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000014 /* Services.swift */; };
 		1A0000000000000000000031 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000015 /* Assets.xcassets */; };
+		1A0000000000000000000052 /* icons in Resources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000051 /* icons */; };
 		1A0000000000000000000025 /* SigningEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000016 /* SigningEngine.swift */; };
 		1A0000000000000000000026 /* AnisetteLocal.m in Sources */ = {isa = PBXBuildFile; fileRef = 1A0000000000000000000017 /* AnisetteLocal.m */; };
 		1A0000000000000000000032 /* AltSign-Static in Frameworks */ = {isa = PBXBuildFile; productRef = 1A0000000000000000000042 /* AltSign-Static */; };
@@ -24,6 +25,7 @@
 		1A0000000000000000000013 /* MeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeViews.swift; sourceTree = "<group>"; };
 		1A0000000000000000000014 /* Services.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Services.swift; sourceTree = "<group>"; };
 		1A0000000000000000000015 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1A0000000000000000000051 /* icons */ = {isa = PBXFileReference; lastKnownFileType = folder; path = icons; sourceTree = "<group>"; };
 		1A0000000000000000000016 /* SigningEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SigningEngine.swift; sourceTree = "<group>"; };
 		1A0000000000000000000017 /* AnisetteLocal.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AnisetteLocal.m; sourceTree = "<group>"; };
 		1A0000000000000000000018 /* AnisetteLocal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AnisetteLocal.h; sourceTree = "<group>"; };
@@ -70,6 +72,7 @@
 				1A0000000000000000000018 /* AnisetteLocal.h */,
 				1A0000000000000000000019 /* AppKOPLOP-Bridging-Header.h */,
 				1A0000000000000000000015 /* Assets.xcassets */,
+				1A0000000000000000000051 /* icons */,
 			);
 			path = AppKOPLOP;
 			sourceTree = "<group>";
@@ -139,6 +142,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A0000000000000000000031 /* Assets.xcassets in Resources */,
+				1A0000000000000000000052 /* icons in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

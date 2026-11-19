@@ -128,11 +128,38 @@ struct AppDetailView: View {
                     .font(DS.text(12, .medium))
                     .foregroundColor(DS.sub)
 
-            case .installing:
-                ProgressRing(progress: 1)
-                Text(L("正在安装", "Installing"))
+            case .downloaded:
+                Button { engine.sign(app) } label: {
+                    Text(L("签名", "Sign"))
+                        .font(DS.text(16, .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 132, height: 42)
+                        .background(Capsule().fill(DS.blue))
+                }
+                .buttonStyle(.plain)
+                Text(L("已下载，待签名", "Downloaded, ready to sign"))
                     .font(DS.text(12, .medium))
                     .foregroundColor(DS.sub)
+
+            case .installing:
+                ProgressRing(progress: 1)
+                Text(L("正在签名", "Signing"))
+                    .font(DS.text(12, .medium))
+                    .foregroundColor(DS.sub)
+
+            case .signed:
+                Button { engine.showToast(L("已签名包在「文件 → 本机 → AppKOPLOP → Downloads」", "Signed file is in Files → Downloads")) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 13, weight: .bold))
+                        Text(L("已签名", "Signed"))
+                            .font(DS.text(16, .bold))
+                    }
+                    .foregroundColor(DS.blue)
+                    .frame(width: 132, height: 42)
+                    .background(Capsule().fill(DS.fill))
+                }
+                .buttonStyle(.plain)
 
             case .installed:
                 Button { engine.showToast(L("已安装，可在桌面打开", "Installed, open from Home Screen")) } label: {
